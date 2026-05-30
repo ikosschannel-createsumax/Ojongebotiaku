@@ -1,0 +1,8 @@
+{
+  "name": "Remix: LDR Miner Fusion",
+  "description": "Permainan tambang dan gabung bijih mineral (Suika-style) untuk menghasilkan Koin LDR. Dilengkapi sistem registrasi penambang, rig tambang otomatis pasif, upgrade sekop \u0026 bor, serta papan peringkat.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
