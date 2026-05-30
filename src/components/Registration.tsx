@@ -21,7 +21,9 @@ import {
   Check, 
   AlertCircle,
   KeyRound,
-  FileCheck
+  FileCheck,
+  Copy,
+  ExternalLink
 } from "lucide-react";
 import { signInWithPopup, GoogleAuthProvider } from "firebase/auth";
 import { auth } from "../utils/firebase";
@@ -70,6 +72,95 @@ export default function Registration({ onComplete, isMuted, onToggleMute }: Regi
   // Gmail state variables
   const [gmailStatus, setGmailStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [gmailError, setGmailError] = useState("");
+
+  // Unauthorized Google OAuth domains state
+  const [unauthorizedDomain, setUnauthorizedDomain] = useState<string | null>(null);
+  const [copiedDomain, setCopiedDomain] = useState(false);
+
+  const renderUnauthorizedDomainHelper = () => {
+    if (!unauthorizedDomain) return null;
+
+    const consoleLink = `https://console.firebase.google.com/project/gen-lang-client-0762659387/authentication/settings`;
+    
+    return (
+      <div className="p-4 rounded-xl border border-amber-500/30 bg-[#16130b] text-left space-y-3 my-4 animate-shake">
+        <div className="flex items-center justify-between gap-2 border-b border-amber-500/20 pb-2">
+          <span className="p-1 px-2 rounded bg-amber-500/10 text-amber-400 font-mono font-bold text-[10px] uppercase tracking-wider flex items-center gap-1">
+            <AlertCircle size={12} className="stroke-[2.5]" />
+            <span>auth/unauthorized-domain</span>
+          </span>
+          <span className="text-[10px] font-mono text-gray-500">Firebase Sec-Ops</span>
+        </div>
+
+        <div className="space-y-1">
+          <h4 className="text-xs font-black text-amber-400 uppercase tracking-wide">
+            🔑 Domain Aplikasi Belum Diotorisasi
+          </h4>
+          <p className="text-[11px] text-gray-300 leading-relaxed md:text-xs">
+            Firebase Authentication mendeteksi domain aplikasi Anda saat ini belum terdaftar di daftar <strong>Domain yang diotorisasi (Authorized domains)</strong> pada proyek Firebase milik Anda.
+          </p>
+        </div>
+
+        <div className="p-3 bg-black/60 rounded-lg border border-gray-800 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[9px] font-mono text-gray-500 uppercase tracking-wider">DOMAIN YANG HARUS DITAMBAHKAN</span>
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText(window.location.hostname);
+                setCopiedDomain(true);
+                setTimeout(() => setCopiedDomain(false), 2000);
+              }}
+              className="text-[10px] font-mono font-black text-amber-400 hover:text-amber-350 flex items-center gap-1.5 cursor-pointer transition uppercase"
+            >
+              <Copy size={11} />
+              <span>{copiedDomain ? "Tersalin!" : "Salin Domain"}</span>
+            </button>
+          </div>
+          <div className="font-mono text-xs text-emerald-400 select-all bg-[#080a10] p-2 rounded border border-gray-900 break-all">
+            {window.location.hostname}
+          </div>
+        </div>
+
+        <div className="space-y-2 bg-[#0d0f14]/80 p-3 rounded-lg border border-gray-850">
+          <span className="text-[10px] font-mono font-black text-amber-500 uppercase tracking-widest block">
+            📋 LANGKAH PENYELESAIAN (CARA MEMPERBAIKI):
+          </span>
+          <ol className="list-decimal list-inside text-[11px] text-gray-300 space-y-2 pl-0.5 leading-relaxed font-sans">
+            <li>
+              Salin domain di atas dengan mengklik tombol <strong className="text-amber-400">Salin Domain</strong>.
+            </li>
+            <li>
+              Buka menu pengaturan Firebase Authentication dengan mengklik tombol di bawah ini:
+            </li>
+            <div className="py-1">
+              <a
+                href={consoleLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex w-full py-2 px-3 rounded-lg bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black text-xs font-black transition items-center justify-center gap-1.5 shadow-lg font-mono text-center"
+              >
+                <span>BUKA FIREBASE AUTHENTICATION CONSOLE ↗</span>
+                <ExternalLink size={12} className="stroke-[2.5]" />
+              </a>
+            </div>
+            <li>
+              Di bagian atas halaman yang terbuka, pilih tab <strong className="text-white">Settings</strong> (Setelan).
+            </li>
+            <li>
+              Pilih menu <strong className="text-white">Authorized Domains</strong> (Domain yang diotorisasi) di kolom kiri.
+            </li>
+            <li>
+              Klik tombol <strong className="text-amber-400">"Add domain" / "Tambahkan domain"</strong>, tempel (paste) domain yang tadi Anda salin, lalu klik <strong className="text-white">Add</strong> untuk menyimpan.
+            </li>
+            <li>
+              Kembali ke halaman ini, segarkan/refresh browser Anda, dan coba lagi login dengan Google!
+            </li>
+          </ol>
+        </div>
+      </div>
+    );
+  };
 
   const buildMimeMessage = (to: string, subject: string, bodyText: string) => {
     const emailLines = [
@@ -134,6 +225,7 @@ export default function Registration({ onComplete, isMuted, onToggleMute }: Regi
   const handleSendRealGmail = async () => {
     setGmailStatus('sending');
     setGmailError("");
+    setUnauthorizedDomain(null);
     try {
       const provider = new GoogleAuthProvider();
       provider.addScope('https://www.googleapis.com/auth/gmail.send');
@@ -150,13 +242,23 @@ export default function Registration({ onComplete, isMuted, onToggleMute }: Regi
     } catch (err: any) {
       console.error(err);
       setGmailStatus('error');
-      setGmailError(err.message || String(err));
+      const isUnauthorized = 
+        (err.code && err.code === 'auth/unauthorized-domain') || 
+        (err.message && err.message.toLowerCase().includes('unauthorized-domain')) ||
+        String(err).toLowerCase().includes('unauthorized-domain');
+      if (isUnauthorized) {
+        setUnauthorizedDomain(window.location.hostname);
+        setGmailError("Kesalahan Firebase: Domain ini belum didaftarkan di Firebase Console (auth/unauthorized-domain). Selesaikan dengan petunjuk di bawah.");
+      } else {
+        setGmailError(err.message || String(err));
+      }
     }
   };
 
   const handleGoogleQuickAuth = async () => {
     setErrorMessage("");
     setSuccessMessage("");
+    setUnauthorizedDomain(null);
     try {
       const provider = new GoogleAuthProvider();
       provider.addScope('email');
@@ -188,7 +290,7 @@ export default function Registration({ onComplete, isMuted, onToggleMute }: Regi
         const googleProfile: MinerProfile = {
           username: customUsername.substring(0, 15),
           minerTag: minerTag,
-          avatar: googleUser.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${customUsername}`,
+          avatar: googleUser.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed={customUsername}`,
           role: selectedRole,
           level: 1,
           experience: 0,
@@ -208,7 +310,16 @@ export default function Registration({ onComplete, isMuted, onToggleMute }: Regi
       }
     } catch (err: any) {
       console.error(err);
-      setErrorMessage(err.message || String(err));
+      const isUnauthorized = 
+        (err.code && err.code === 'auth/unauthorized-domain') || 
+        (err.message && err.message.toLowerCase().includes('unauthorized-domain')) ||
+        String(err).toLowerCase().includes('unauthorized-domain');
+      if (isUnauthorized) {
+        setUnauthorizedDomain(window.location.hostname);
+        setErrorMessage("Kesalahan Firebase: Domain ini belum didaftarkan di Firebase Console (auth/unauthorized-domain). Selesaikan dengan petunjuk di bawah.");
+      } else {
+        setErrorMessage(err.message || String(err));
+      }
     }
   };
 
@@ -685,6 +796,9 @@ export default function Registration({ onComplete, isMuted, onToggleMute }: Regi
                       <p className="text-[9px] font-mono text-red-400 border border-red-500/10 p-2 rounded bg-red-950/20">
                         Authentication Failed: {gmailError || "Network rejected SMTP packet"}
                       </p>
+                      
+                      {renderUnauthorizedDomainHelper()}
+
                       <button
                         type="button"
                         onClick={handleSendRealGmail}
@@ -1058,6 +1172,8 @@ export default function Registration({ onComplete, isMuted, onToggleMute }: Regi
                 ⚠ {errorMessage}
               </div>
             )}
+
+            {renderUnauthorizedDomainHelper()}
 
             {successMessage && (
               <div className="p-3 bg-green-950/40 border border-green-500/40 text-green-300 rounded-lg text-xs font-mono animate-pulse">
